@@ -1,0 +1,616 @@
+---
+title: "<img src ='logo2.png' height='40'> Análise do Mercado de Trabalho"
+author: 'Núcleo de Dados <br><span style = "font-size: 110%;">ADEPE<br><a href="https://github.com/dteconometrics">`r fontawesome::fa("github", fill = "#282f6b")`</a>&nbsp; <a href="https://www.linkedin.com/in/vinicius-limeira-565117180/">`r fontawesome::fa("linkedin", fill = "#282f6b")`</a>&nbsp; <a href="mailto:vinicius.valenca@adepe.pe.gov.br">`r fontawesome::fa("envelope", fill = "#282f6b")`</a>&nbsp; <a href="https://www.adepe.pe.gov.br/">`r fontawesome::fa("home", fill = "#282f6b")`</a></span>'
+date: "2023-12-12"
+lang: pt
+format: 
+  html:
+    theme: cosmo
+    page-layout: full
+    fig-width: 4.5
+    fig-height: 3
+    fig-dpi: 600
+execute:
+  echo: false
+  warning: false
+  message: false   # não exibe avisos resultantes de códig
+  
+---
+
+
+
+```{r pacotes}
+
+#| include: false
+library(knitr)
+library(ipeadatar)
+library(dplyr)
+library(magrittr)
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(dtplyr)
+library(scales)
+library(tidyverse)
+library(knitr)
+library(ipeadatar)
+library(sidrar)
+library(zoo)
+library(scales)
+library(timetk)
+library(knitr)
+library(ggthemes)
+library(plotly)
+library(writexl)
+library(rbcb)
+library(ggplot2)
+library(vars)
+library(readxl)
+library(forecast)
+library(scales)
+library(ggrepel)
+library(xtable)
+library(xts)
+library(ggthemes)
+library(purrr)
+library(kableExtra)
+library(GetTDData)
+library(readr)
+library(xts)
+library(forecast)
+library(scales)
+library(mFilter)
+library(grid)
+library(png)
+library(rbcb)
+library(Quandl)
+library(basedosdados)
+library(fontawesome)
+library(rvest)
+library(forcats)
+
+# Fontes 
+
+foot_ibge <- "Fonte: ADEPE com dados do IBGE"
+foot_mte <- "Fonte: ADEPE com dados do Ministério da Economia."
+foot_mte_2 <- "fonte: ADEPE com dados do IBGE/BCB"
+
+# Cores para os Gráficos 
+
+colors <- c(
+  blue       = "#282f6b",
+  red        = "#b22200",
+  yellow     = "#eace3f",
+  green      = "#224f20",
+  purple     = "#5f487c",
+  orange     = "#b35c1e",
+  turquoise  = "#419391",
+  green_two  = "#839c56",
+  light_blue = "#3b89bc",
+  gray       = "#666666",
+  pink =       "#c310cc",
+  light_green=  "#8dcc10"
+  
+  )
+```
+
+
+
+
+```{r IBGE}
+#| include: false
+#| 
+# IBGE PNADC ----------------------
+
+names1 = c("date","populacao")
+
+
+populacao = '/t/6022/n1/all/v/606/p/all' %>% 
+  get_sidra(api=.) %>% 
+  dplyr::mutate(date = parse_date(`Trimestre Móvel (Código)`, format='%Y%m')) %>% 
+  dplyr::select(date,Valor) %>% 
+  as_tibble()
+
+## Condição 
+
+names = c('date', 'pnea', 'pea', 'desocupada', 'ocupada', 'pia')
+
+condicao_2 = get_sidra(api = '/t/6318/n1/all/v/1641/p/all/c629/all') %>% 
+  mutate(date = parse_date(`Trimestre Móvel (Código)`,
+                           format = '%Y%m')) %>% 
+  dplyr::select(date,"Condição em relação à força de trabalho e condição de ocupação", Valor) %>% 
+  spread("Condição em relação à força de trabalho e condição de ocupação", Valor) %>% 
+  `colnames<-`(names) %>% 
+  as_tibble()
+
+
+# Juntando os dados 
+
+agregado_pnad = inner_join(populacao, condicao_2,  by='date') %>% 
+  rename(populacao = Valor) %>% 
+  dplyr::mutate(inativos = populacao - pia, 
+        desemprego = round((desocupada/pea) * 100, 1),
+         participacao = pea/pia*100) %>% 
+  dplyr::select(date, populacao, inativos, pia, pea, pnea, ocupada, desocupada,
+         desemprego, participacao)
+
+
+## Formato long 
+
+agregado_pnad_long =
+  agregado_pnad %>%
+  gather(variavel, valor, -date)
+
+## Apenas o Desemprego 
+
+desocupado =  '/t/6381/n1/all/v/4099/p/all/d/v4099%201' %>% 
+  get_sidra(api=.) %>% 
+  dplyr::mutate(date = parse_date(`Trimestre Móvel (Código)`,
+                           format = '%Y%m')) %>% 
+  dplyr::select(date, "pd" = "Valor") %>% 
+  as_tibble()
+
+## Dados Referentes a Categorias 
+
+ocupacao_categoria = '/t/6320/n1/all/v/4090/p/all/c11913/allxt' %>% 
+  get_sidra(api=.) %>% 
+  mutate(date = parse_date(`Trimestre Móvel (Código)`, format = '%Y%m')) %>% 
+  dplyr::select(date, "Posição na ocupação e categoria do emprego no trabalho principal", Valor) %>% 
+  spread('Posição na ocupação e categoria do emprego no trabalho principal', Valor) %>% 
+  rename('Emprego sem Carteira' = 'Empregado no setor privado, exclusive trabalhador doméstico - com carteira de trabalho assinada',
+         'Emprego com Carteira' = 'Empregado no setor privado, exclusive trabalhador doméstico - sem carteira de trabalho assinada') %>% 
+  as_tibble()
+
+ocupacao_categoria_long = ocupacao_categoria %>% 
+  gather(variavel, valor, -date)
+
+
+
+## Pnad Massa 
+
+pnad_massa = get_sidra(api = '/t/6392/n1/all/v/6288,6293/p/all') %>% 
+  dplyr::mutate(date = parse_date(`Trimestre Móvel (Código)`,
+                           format = '%Y%m')) %>% 
+  dplyr::select(date, Valor, 'variavel'='Variável') %>% 
+  pivot_wider(names_from = variavel,
+              values_from = Valor) %>% 
+  dplyr::rename(habitual =  "Massa de rendimento mensal nominal das pessoas de 14 anos ou mais de idade ocupadas na semana de referência com rendimento de trabalho, habitualmente recebido em todos os trabalhos",
+                efetivo = "Massa de rendimento mensal real das pessoas de 14 anos ou mais de idade ocupadas na semana de referência com rendimento de trabalho, habitualmente recebido em todos os trabalhos" 
+                ) %>% 
+  as.tibble()
+
+
+# Rendimento por setor 
+
+pnad_setor = '/t/6391/n1/all/v/5932/p/all/c888/47948,47949,47950,56627' %>% 
+  get_sidra(api=.) %>% 
+  dplyr::mutate(date = parse_date(`Trimestre Móvel (Código)`, format = '%Y%m')) %>% 
+  dplyr::select(date, "setor" = "Grupamento de atividade no trabalho principal", Valor) %>% 
+  pivot_wider(names_from = "setor",
+              values_from = Valor) %>% 
+  dplyr::rename(comercio = "Comércio, reparação de veículos automotores e motocicletas",
+                servicos = "Outros serviços",
+                construcao =  "Construção",
+                industria = "Indústria geral") %>% 
+  as_tibble()
+
+
+pnad_setor_long = pnad_setor %>% 
+  gather(variavel, valor, -date) %>% 
+  mutate(date = as.Date(date))
+
+
+
+
+# Pnad Tri Para Pernambuco  --------------------------------
+
+# Coleta dos Dados
+
+## Polulção Pernambuco 
+
+names = c("date", "populacao")
+
+populacao_pe = "/t/6462/n3/26/v/606/p/all" %>% 
+  get_sidra(api=.) %>% 
+  dplyr::mutate(date = as.yearqtr(`Trimestre (Código)`, format = '%Y%q')) %>% 
+  dplyr::select(date, Valor) %>% 
+  `colnames<-`(names) %>% 
+  as_tibble()
+
+## Desemprego Pernambuco 
+
+## Coleta e Tratamento dos Dados 
+
+names2 <- c("date", "populacao_pe")
+
+populacao_pe = '/t/6462/n3/26/v/606/p/all' %>% 
+  get_sidra(api =.) %>% 
+  dplyr::mutate(date = parse_date(`Trimestre (Código)`, format = '%Y%m')) %>% 
+  dplyr::select(date, Valor) %>% 
+  as_tibble()
+
+# Condição PE  
+
+names_pe = c('date', 'pnea_pe', 'pea_pe', 'desocupada_pe', 'ocupada_pe', 'pia_pe')
+
+condicao_pe = '/t/6463/n3/26/v/1641/p/all/c629/all' %>% 
+  get_sidra(api =.) %>% 
+  dplyr::mutate(date = parse_date(`Trimestre (Código)`, format = '%Y%m')) %>% 
+  dplyr::select(date,"Condição em relação à força de trabalho e condição de ocupação", Valor) %>% 
+  spread("Condição em relação à força de trabalho e condição de ocupação", Valor) %>% 
+  `colnames<-`(names_pe) %>% 
+  as_tibble()
+  
+
+## Juntar os dados de Pernambuco 
+
+agregado_pe = inner_join(populacao_pe, condicao_pe, by = 'date') %>% 
+  rename(populacao = Valor) %>% 
+  dplyr::mutate(
+    inativos_pe = populacao - pia_pe,
+    desemprego_pe = round((desocupada_pe/pea_pe)* 100, 1),
+    participacao_pe = pea_pe/pia_pe *100) %>% 
+    dplyr::select(date, populacao, inativos_pe, pia_pe, pea_pe, ocupada_pe, desocupada_pe,
+                desemprego_pe, participacao_pe)
+
+
+
+agregado_pe_st = agregado_pe %>% 
+  dplyr::select(date, desemprego_pe, participacao_pe)
+
+
+agregado_st <- ts(subset(agregado_pe_st, select = -date), frequency = 4, start = c(2012,01))
+
+
+
+## Formato long 
+
+agregado_pe_long = agregado_pe %>% 
+  gather(variavel, valor, -date)
+
+
+
+## Rendimento Trimestral dos Salários
+
+
+pnad_rendimento_tri = get_sidra(api= '/t/5437/n1/all/v/5932/p/all/c58/95253') %>% 
+  dplyr::mutate(date = as.yearqtr(`Trimestre (Código)`, format = '%Y%q')) %>% 
+  dplyr::select(date, "value" = Valor) %>% 
+  as_tibble()
+
+
+
+## Rendimento por setor Pernambuco
+
+rendimento_pe = '/t/5442/n3/26/v/5932/p/all/c888/47948,47949,47950,56627' %>% 
+  get_sidra(api = .) %>% 
+  dplyr::mutate(date = as.yearqtr(`Trimestre (Código)`, format = '%Y%q')) %>% 
+  dplyr::select(date, "setor" = "Grupamento de atividade no trabalho principal", Valor) %>% 
+  spread("setor", Valor) %>% 
+  dplyr::rename(comercio = "Comércio, reparação de veículos automotores e motocicletas",
+                servicos = "Outros serviços",
+                construcao =  "Construção",
+               industria = "Indústria geral")
+
+
+
+rendimento_pe_long = rendimento_pe %>% 
+  gather(variavel, valor, -date) %>% 
+  mutate(date = as.Date(date))
+
+
+
+## Massa Pernambuco 
+
+
+massa_pe = '/t/6421/n3/26/v/8745,8747/p/all/c12029/99383' %>% 
+  get_sidra(api=.) %>% 
+  dplyr::mutate(date = as.yearqtr(`Trimestre (Código)`, format = '%Y%q')) %>% 
+  dplyr::select(date, Valor, "variavel" = "Variável") %>% 
+  pivot_wider(names_from = variavel,
+              values_from = Valor) %>% 
+  dplyr::rename(habitual = "Massa de rendimento mensal real das pessoas de 14 anos ou mais de idade ocupadas na semana de referência com rendimento de trabalho, habitualmente recebido no trabalho principal",
+                efetivo = "Massa de rendimento mensal real das pessoas de 14 anos ou mais de idade ocupadas na semana de referência com rendimento de trabalho, efetivamente recebido no trabalho principal")
+
+
+
+
+
+```
+
+
+```{r caged}
+
+## Caged Brasil----------------------- 
+
+## Dados do Caged Nacional 
+
+variaveis <- ipeadatar::available_series()
+
+df_caged = ipeadata(c("CAGED12_SALDON12"), language = "br")
+caged_demissoes = ipeadatar::ipeadata(c("CAGED12_DESLIGN12"), language = "br")
+caged_admissoes = ipeadatar::ipeadata(c("CAGED12_ADMISN12"), language = "br")
+
+
+
+parametros <- list(
+api_caged = "CAGED12_SALDON12")
+
+
+raw_caged <- ipeadatar::ipeadata(code = parametros$api_caged)
+
+
+# Saldo do Novo CAGED
+saldo <- raw_caged %>%
+  dplyr::select(date, value) %>% 
+  dplyr::mutate(value = value / 1000) %>% 
+  dplyr::rename(saldo = value) %>% 
+  dplyr::as_tibble()
+
+caged_demissoes <- caged_admissoes %>% 
+  dplyr::select(date, value) %>% 
+  dplyr::mutate(value = value / 1000) %>% 
+  dplyr::rename(desligamentos = value) %>% 
+  dplyr::as_tibble()
+
+
+caged_admissoes <- caged_admissoes %>% 
+  dplyr::select(date, value) %>% 
+  dplyr::mutate(value = value / 1000) %>% 
+  dplyr::rename(admissoes = value) %>% 
+  as_tibble()
+
+
+dados_caged = inner_join(saldo, caged_demissoes, by = "date")
+caged_final = inner_join(dados_caged, caged_admissoes, by = "date")
+
+
+
+## Caged Pernambuco e Nordeste ----------------------
+
+
+
+
+
+```
+
+
+```{r seguro desem}
+
+
+#url = 'http://pdet.mte.gov.br/images/Seguro-Desemprego/202312/3-%20S%C3%A9rie%20Hist%C3%B3rica%20do%20Seguro-Desemprego%20-%202000%20a%202023%20-%20Atualizado%20em%2011.01.2024.xlsx'
+
+#download.file(url, destfile = 'seguro.xlsx', mode='wb')
+data = read_excel('seguro.xlsx', sheet="Tabela 1", skip=5) %>%
+  drop_na()
+
+dates = parse_date_time(colnames(data[-1]),
+                        orders='%Y/%m')
+names = data$...1
+data = t(data[,-1])
+row.names(data) = NULL
+colnames(data) = names
+
+## Todos os Estados 
+
+seguro = 
+  data %>%
+  as_tibble() %>%
+  mutate(DATES = dates) %>%
+  rename(date = DATES) %>% 
+  dplyr::select(date, everything())
+
+
+seguro_long = seguro %>% 
+  pivot_longer(cols = -date, names_to = "regiao", values_to = "value") %>% 
+  mutate(date = as.Date(date))
+
+
+
+
+
+
+
+```
+
+
+::: {.grid}
+
+::: {.g-col-7}
+## Introdução 
+- Aqui vem o Texto 
+
+:::
+
+:::{.g-col-5}
+
+```{r fig.height=6, fig.width=6}
+
+desocupado %>% 
+  slice_tail(n=24) %>% 
+  ggplot2::ggplot(aes(x = date , y=pd))+
+  geom_line(size = .8, colour = "gray")+
+  scale_x_date(breaks = date_breaks("1 months"),
+               labels = date_format("%b/%Y"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1) )+
+  geom_point(size=9, shape = 21, colour = "black", fill = alpha("darkblue", 0.5))+
+  geom_text(aes(label = pd, size = 1.2,
+                hjust = 0.6, vjust = 0.6))+
+  ggthemes::theme_pander()+
+  xlab('')+ylab('milhões de pessoas')+
+  labs(title = "Populaçao desocupada na PNAD Continua", 
+       caption = foot_ibge)+
+  theme(legend.position = "none")
+
+```
+
+
+```{r}
+
+last_desem <- agregado_pnad_long %>% 
+  filter(variavel %in% c('desemprego')) %>% 
+  group_by(variavel) %>% 
+  filter(date == max(date)) %>% 
+  ungroup()
+
+agregado_pnad_long =
+  agregado_pnad %>%
+  gather(variavel, valor, -date)
+
+filter(agregado_pnad_long, 
+       variavel %in% c('desemprego', 'participacao')) %>%
+  filter(date > "2020-01-01") %>% 
+  ggplot(aes(x = date, y = valor, colour = variavel)) +
+  geom_line(size = 0.8, color = "darkblue") +
+  #geom_text(data = last_desem, aes(label = valor), vjust = 2, hjust = 2, nudge_x = 1)+
+  facet_wrap(~variavel, scales = 'free') +
+  theme_pander() +
+  labs(x = '', y = '', title = '', caption = foot_ibge) +
+  theme(legend.position = 'none')
+```
+
+
+:::
+
+:::
+
+::: {.grid}
+
+::: {.g-col-7}
+## Seguro Desemprego 
+
+Aqui vem o texto 
+:::
+:::{.g-col-5}
+::: panel-tabset
+
+### Brasil
+
+```{r, fig.height=6, fig.width=6}
+
+library(ggplot2)
+
+seguro_bar <- seguro_long %>% 
+  dplyr::mutate(
+    months = lubridate::month(date, label = TRUE) %>% forcats::as_factor(),
+    years = lubridate::year(date) %>% forcats::as_factor()
+    ) %>% 
+  dplyr::filter(
+    regiao == "BRASIL",
+    months <= lubridate::month(max(date), label = TRUE)
+    )
+
+seguro_bar %>% 
+  ggplot2::ggplot(ggplot2::aes(x = years, y = value / 1e3, fill = months)) +
+  ggplot2::geom_bar(stat = "identity", position = ggplot2::position_stack(reverse = TRUE)) +
+  ggplot2::scale_x_discrete(breaks = levels(seguro_bar$years)) +
+  ggplot2::scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  ggplot2::scale_fill_manual(values = unname(colors)) +
+  ggplot2::geom_text(
+    ggplot2::aes(label = months), 
+    position = ggplot2::position_stack(vjust = .5, reverse = TRUE),
+    vjust    = 0.32,
+    size     = 4, 
+    fontface = "bold",
+    color    = "white"
+    ) +
+  ggplot2::coord_flip() +
+  ggplot2::theme(
+    legend.position  = "none",
+    plot.title       = ggplot2::element_text(size = 12, face = "bold"),
+    plot.subtitle    = ggplot2::element_text(size = 10, face = "italic"),
+    axis.text.x      = ggplot2::element_blank(),
+    axis.text.y      = ggplot2::element_text(face = "bold", size = 10), 
+    axis.ticks       = ggplot2::element_blank(),
+    panel.background = element_blank()
+    ) +
+  ggplot2::labs(
+    x        = NULL,
+    y        = NULL,
+    title    = "Pedidos de Seguro-Desemprego",
+    subtitle = "Em milhões de requisições acumuladas no ano até o mês de corte",
+    caption  = foot_ibge
+    ) + 
+  ggplot2::geom_text(
+    ggplot2::aes(label = round(stat(y) / 1e3, 2), group = years), 
+    stat     = "summary", 
+    fun      = sum, 
+    vjust    = .4,
+    hjust    = -.2,
+    size     = 4.2,
+    fontface = "bold"
+  )
+
+
+
+```
+
+### Pernambuco 
+
+```{r fig.height=6, fig.width=6}
+
+seguro_bar_pe <- seguro_long %>% 
+  dplyr::mutate(
+    months = lubridate::month(date, label = TRUE) %>% forcats::as_factor(),
+    years = lubridate::year(date) %>% forcats::as_factor()
+    ) %>% 
+  dplyr::filter(
+    regiao == "PERNAMBUCO",
+    months <= lubridate::month(max(date), label = TRUE)
+    )
+
+seguro_bar_pe %>% 
+  ggplot2::ggplot(ggplot2::aes(x = years, y = value / 1e3, fill = months)) +
+  ggplot2::geom_bar(stat = "identity", position = ggplot2::position_stack(reverse = TRUE)) +
+  ggplot2::scale_x_discrete(breaks = levels(seguro_bar$years)) +
+  ggplot2::scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  ggplot2::scale_fill_manual(values = unname(colors)) +
+  ggplot2::geom_text(
+    ggplot2::aes(label = months), 
+    position = ggplot2::position_stack(vjust = .5, reverse = TRUE),
+    vjust    = 0.32,
+    size     = 4, 
+    fontface = "bold",
+    color    = "white"
+    ) +
+  ggplot2::coord_flip() +
+  ggplot2::theme(
+    legend.position  = "none",
+    plot.title       = ggplot2::element_text(size = 12, face = "bold"),
+    plot.subtitle    = ggplot2::element_text(size = 10, face = "italic"),
+    axis.text.x      = ggplot2::element_blank(),
+    axis.text.y      = ggplot2::element_text(face = "bold", size = 10), 
+    axis.ticks       = ggplot2::element_blank(),
+    panel.background = element_blank()
+    ) +
+  ggplot2::labs(
+    x        = NULL,
+    y        = NULL,
+    title    = "Pedidos de Seguro-Desemprego",
+    subtitle = "Em Milhares de requisições acumuladas no ano até o mês de corte",
+    caption  = foot_ibge
+    ) + 
+  ggplot2::geom_text(
+    ggplot2::aes(label = round(stat(y), 3), group = years), 
+    stat     = "summary", 
+    fun      = sum, 
+    vjust    = .4,
+    hjust    = -.2,
+    size     = 4.2,
+    fontface = "bold"
+  )
+
+
+
+
+```
+
+:::
+
+
+:::
+:::
+
+
+
+

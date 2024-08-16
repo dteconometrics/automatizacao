@@ -1,0 +1,14 @@
+---
+title: "Análise do Mercado de Trabalho"
+author: 'Núcleo de Dados <br><span style = "font-size: 110%;">ADEPE<br><a href="https://github.com/dteconometrics">`r fontawesome::fa("github", fill = "#282f6b")`</a>&nbsp; <a href="https://www.linkedin.com/in/vinicius-limeira-565117180/">`r fontawesome::fa("linkedin", fill = "#282f6b")`</a>&nbsp; <a href="mailto:vinicius.valenca@adepe.pe.gov.br">`r fontawesome::fa("envelope", fill = "#282f6b")`</a>&nbsp; <a href="https://www.adepe.pe.gov.br/">`r fontawesome::fa("home", fill = "#282f6b")`</a></span>'
+date: "2023-12-12"
+lang: pt
+output: 
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+geometry: margin=2cm
+---
+
+## Pacotes
