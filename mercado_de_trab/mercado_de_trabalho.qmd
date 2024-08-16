@@ -570,11 +570,11 @@ pnad_setor_long %>%
 
 ### Ranking Desocupação
 
-|Ranking|	Estado | 	taxa (%)%)  |
+|Ranking|	Estado | 	taxa (%) |
 |:--------|:-------------------|-------:|
 |1°|  Santa Catarina	|3.2|
 |2°|	Rondônia	|3.3|
-|3°|	Mato Grosso|	|3.3 |
+|3°|	Mato Grosso|	|3.3|
 |4°|	Mato Grosso do Sul	|3.8|
 |5°|	Tocantins	|4.3|
 |6°|	Paraná	|4.4|
